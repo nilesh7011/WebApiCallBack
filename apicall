@@ -1,0 +1,315 @@
+import Foundation
+
+import UIKit
+import Alamofire
+import SwiftyJSON
+
+import SystemConfiguration
+
+
+let ReachabilityStatusChangedNotification = "ReachabilityStatusChangedNotification"
+
+enum ReachabilityType: CustomStringConvertible {
+    case WWAN
+    case WiFi
+    
+    var description: String {
+        switch self {
+        case .WWAN: return "WWAN"
+        case .WiFi: return "WiFi"
+        }
+    }
+}
+
+enum ReachabilityStatus: CustomStringConvertible  {
+    case Offline
+    case Online(ReachabilityType)
+    case Unknown
+    
+    var description: String {
+        switch self {
+        case .Offline: return "Offline"
+        case .Online(let type): return "Online (\(type))"
+        case .Unknown: return "Unknown"
+        }
+    }
+}
+
+class WebApiCallBack:UIViewController{
+    
+    let count = 1
+    class func connectionStatus() -> ReachabilityStatus {
+        var zeroAddress = sockaddr_in()
+        zeroAddress.sin_len = UInt8(MemoryLayout.size(ofValue: zeroAddress))
+        zeroAddress.sin_family = sa_family_t(AF_INET)
+        guard let defaultRouteReachability = withUnsafePointer(to: &zeroAddress, {
+            
+            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                
+                SCNetworkReachabilityCreateWithAddress(nil, $0)
+                
+            }
+            
+        }) else {
+            return .Unknown
+        }
+        
+        var flags : SCNetworkReachabilityFlags = []
+        if !SCNetworkReachabilityGetFlags(defaultRouteReachability, &flags) {
+            return .Unknown
+        }
+        
+        return ReachabilityStatus(reachabilityFlags: flags)
+    }
+    
+    
+    class func monitorReachabilityChanges() {
+        let host = "google.com"
+        var context = SCNetworkReachabilityContext(version: 0, info: nil, retain: nil, release: nil, copyDescription: nil)
+        let reachability = SCNetworkReachabilityCreateWithName(nil, host)!
+        
+        SCNetworkReachabilitySetCallback(reachability, { (_, flags, _) in
+            let status = ReachabilityStatus(reachabilityFlags: flags)
+            
+            NotificationCenter.default.post(name: NSNotification.Name(rawValue: ReachabilityStatusChangedNotification),
+                                            object: nil)
+            
+        }, &context)
+        SCNetworkReachabilityScheduleWithRunLoop(reachability, CFRunLoopGetMain(),context as! CFString)
+    }
+    class func isConnectedToNetwork() -> Bool {
+        
+        let status = connectionStatus()
+        switch status {
+        case .Unknown, .Offline:
+            //            print("Not connected")
+            return false
+        case .Online(.WWAN):
+            //            print("Connected via WWAN")
+            return true
+        case .Online(.WiFi):
+            //            print("Connected via WiFi")
+            return true
+        }
+        
+    }
+    
+    class func requestApi(webUrl: String,paramData: NSObject, methiod: String, completionHandler: @escaping (NSDictionary?, NSError?) -> ()) {
+        if (!isConnectedToNetwork()){
+            
+        }else{
+            
+            print(webUrl)
+            
+            if methiod ==   "Post" {
+                makePostCall(webUrl: webUrl, paramData: paramData,completionHandler: completionHandler)
+            }else if methiod == "Get" {
+                makeGetCall(webUrl: webUrl, paramData: paramData,completionHandler: completionHandler)
+            }else if methiod == "Put" {
+                makePutCall(webUrl: webUrl, paramData: paramData,completionHandler: completionHandler)
+            }else if methiod == "Delete" {
+                let urlStr = webUrl + "&NeedLangaugeLabel=Y"
+                makeDeleteCall(webUrl: webUrl, paramData: paramData,completionHandler: completionHandler)
+                
+            }
+            
+        }
+    }
+    
+    class func makePostCall(webUrl: String, paramData: NSObject, completionHandler: @escaping (NSDictionary?, NSError?) -> ()) {
+        let tokenVal = "sai"
+        let authVal = "sai"
+        
+        let headersVal = [
+            "Authorization": "Bearer "+(tokenVal as String),
+            "auth": ""+(authVal as String)
+        ]
+        
+        
+        AF.request(webUrl, method: .post, parameters:  paramData as? [String : AnyObject], encoding: JSONEncoding.default)
+            .responseJSON { response in
+                //   print("First json \(response)")
+                
+                switch response.result {
+                case .success(let value):
+                    completionHandler(value as? NSDictionary, nil)
+                case .failure(let error):
+                    
+                    //    print("Failure with JSON: \(error)")
+                    completionHandler(nil, error as NSError?)
+                }
+            }
+    }
+    
+    class func makeGetCall(webUrl: String, paramData: NSObject, completionHandler: @escaping (NSDictionary?, NSError?) -> ()) {
+        let tokenVal = "sai"
+        let authVal = "sai"
+        
+        let headersVal = [
+            "Authorization": "Bearer "+(tokenVal as String),
+            "auth": ""+(authVal as String)
+        ]
+        
+        
+        AF.request(webUrl, method: .get, parameters:  nil, encoding: JSONEncoding.default)
+            .responseJSON { response in
+                //                print("First json \(response)")
+                
+                switch response.result {
+                case .success(let value):
+                    completionHandler(value as? NSDictionary, nil)
+                case .failure(let error):
+                    
+                    //                 print("Failure with JSON: \(error)")
+                    completionHandler(nil, error as NSError?)
+                }
+            }
+    }
+    
+    class func makePutCall(webUrl: String, paramData: NSObject, completionHandler: @escaping (NSDictionary?, NSError?) -> ()) {
+        let tokenVal = "sai"
+        let authVal = "sai"
+        
+        let headersVal = [
+            "Authorization": "Bearer "+(tokenVal as String),
+            "auth": ""+(authVal as String)
+        ]
+        
+        
+        AF.request(webUrl, method: .put, parameters:  paramData as? [String : AnyObject], encoding: JSONEncoding.default)
+            .responseJSON { response in
+                //                print("First json \(response)")
+                switch response.result {
+                case .success(let value):
+                    completionHandler(value as? NSDictionary, nil)
+                case .failure(let error):
+                    //                 print("Failure with JSON: \(error)")
+                    completionHandler(nil, error as NSError?)
+                }
+            }
+    }
+    
+    class func makeDeleteCall(webUrl: String, paramData: NSObject, completionHandler: @escaping (NSDictionary?, NSError?) -> ()) {
+        let tokenVal = "sai"
+        let authVal = "sai"
+        
+        let headersVal = [
+            "Authorization": "Bearer "+(tokenVal as String),
+            "auth": ""+(authVal as String)
+        ]
+        
+        
+        AF.request(webUrl, method: .delete, parameters:  nil, encoding: JSONEncoding.default)
+            .responseJSON { response in
+                //                print("First json \(response)")
+                
+                switch response.result {
+                case .success(let value):
+                    completionHandler(value as? NSDictionary, nil)
+                case .failure(let error):
+                    //                 print("Failure with JSON: \(error)")
+                    completionHandler(nil, error as NSError?)
+                }
+            }
+    }
+}
+extension ReachabilityStatus {
+    init(reachabilityFlags flags: SCNetworkReachabilityFlags) {
+        let connectionRequired = flags.contains(.connectionRequired)
+        let isReachable = flags.contains(.reachable)
+        let isWWAN = flags.contains(.isWWAN)
+        
+        if !connectionRequired && isReachable {
+            if isWWAN {
+                self = .Online(.WWAN)
+            } else {
+                self = .Online(.WiFi)
+            }
+        } else {
+            self =  .Offline
+        }
+    }
+}
+
+
+// Upside code run properly use this -------
+
+import UIKit
+import Foundation
+import SwiftyJSON
+
+class empmodel: NSObject {
+    var id = String()
+    var employeeName = String()
+    var employeeSalary = String()
+    var employeeAge = String()
+    var profileImage = String()
+}
+
+class webapiViewController: UIViewController {
+    
+    var temparray = [empmodel]()
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        holidayAPI()
+        
+    }
+    public func simpleAlert(message: String){
+        
+        let alert = UIAlertController(title: "Alert", message: message, preferredStyle: UIAlertController.Style.alert)
+        alert.addAction(UIAlertAction(title: "OK", style: UIAlertAction.Style.default, handler: nil))
+        DispatchQueue.main.async { [weak self] in
+            self?.present(alert, animated: true, completion: nil)
+        }
+    }
+    //MARK: Holiday api
+    func holidayAPI() {
+        
+        if WebApiCallBack.isConnectedToNetwork() != true {
+            simpleAlert(message:  "Please verify internet connectivity.")
+            return
+        }
+        
+        let urlString = "https://dummy.restapiexample.com/api/v1/employees"
+        let parameters = NSMutableDictionary()
+        
+        WebApiCallBack.requestApi(webUrl: urlString, paramData: parameters, methiod: "Get", completionHandler: { (responseObject, error) -> () in
+            print("responseObject = \(String(describing: responseObject)); error = \(String(describing: error))")
+            
+            if responseObject != nil {
+                self.temparray = []
+                
+                let mresponse = JSON(responseObject!)
+                
+                print(mresponse)
+                let message = mresponse["message"].stringValue
+                let status = mresponse["status"].stringValue
+                print(message)
+                
+                if status == "success" {
+                    
+                    if let Data = mresponse["data"].array {
+                        for empdetail in Data {
+                            let object = empmodel()
+                            object.id = empdetail["id"].stringValue
+                            object.employeeAge = empdetail["employeeAge"].stringValue
+                            object.employeeName = empdetail["employeeName"].stringValue
+                            object.employeeSalary = empdetail["employeeSalary"].stringValue
+                            self.temparray.append(object)
+                            
+                        }
+                    }
+                }else{
+                    print("status error")
+                    
+                }
+            }else {
+                print("data not set properlly")
+            }
+        })
+    }
+    
+}
+
+
+
